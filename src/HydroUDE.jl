@@ -1,13 +1,17 @@
 # Load all external packages
+cd(@__DIR__)
+cd("..")
+pwd()
 
 using Revise
 
 using DataFrames, Dates, Statistics
 using CSV
 
-using DifferentialEquations
-# using OrdinaryDiffEq
-using Lux, DiffEqFlux
+# using DifferentialEquations
+using OrdinaryDiffEq
+# using Lux, DiffEqFlux
+using Lux
 using ComponentArrays
 using SciMLSensitivity
 
@@ -94,7 +98,7 @@ function gr4j(params, output_times)
     end
 
     prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
-    sol = solve(prob, saveat = Δt)
+    sol = solve(prob, saveat = Δt, Tsit5())
 
     Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
     F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
@@ -161,7 +165,7 @@ function gr4jsnow(params, output_times)
     end
 
     prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
-    sol = solve(prob, saveat = Δt)
+    sol = solve(prob, saveat = Δt,Tsit5())
 
     Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
     F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
@@ -243,7 +247,7 @@ function gr4jsnowNN(params, output_times, ann)
     end
 
     prob = ODEProblem(odesystem!, X0, time_span, params)
-    sol = solve(prob, saveat = Δt)
+    sol = solve(prob, saveat = Δt,Tsit5())
 
     Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
     F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
