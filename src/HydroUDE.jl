@@ -24,7 +24,7 @@ using Interpolations
 using Plots
 
 using Random
-Random.seed!(123)
+Random.seed!(300)
 
 df = CSV.read("src/chepe_data.csv", DataFrame; dateformat="mm/dd/yyyy")
 
@@ -179,7 +179,7 @@ end
 
 ODEparams = [1000.0, 2.0, 200.0, 2.5, 10.0, 13.0, 15.0, 0.0]
 params = vcat(ones(nres+3), ODEparams)
-times = 1.0:Δt:1095.0
+times = 1.0:Δt:data_points[end]
 Qsnow, sol = gr4jsnow(params, times)
 
 #plot(times, sol[2,:])
@@ -303,6 +303,28 @@ opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(
 
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
-optimizer = ADAM(0.001)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=50)
+optimizer = ADAM(0.1)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=10)
 
+out_params = sol.u
+times = 1.0:Δt:train_
+
+Q_nn = gr4jsnowNN(out_params, times, ann)
+
+plot(times, Q_nn)
+plot!(times, df[1:train_,:streamflow], dpi = 300)
+plot!(times,Q_nn)
+
+#test data
+times = train_ + 1:Δt:data_points[end]
+
+Q_nn = gr4jsnowNN(out_params, times, ann)
+
+plot(times, Q_nn)
+plot!(times, df[(train_ +1):end,:streamflow], dpi = 300)
+plot!(times,Q_nn)
+
+
+
+
+# savefig("chepe_plot.png")
