@@ -65,6 +65,24 @@ const ν = 4/9
 const Uₜ = 1
 const nres = 11
 
+# loss function:
+function NSE_loss(model, params, target_data, target_time)
+
+    predicted_data = model(params, target_time)
+    NSE(obs, pred) = 1 - sum((obs .- pred).^2) / sum((obs .- mean(obs)).^2)
+    loss = -NSE(target_data, predicted_data)
+
+    return loss 
+
+end
+
+function callback(p, l)
+
+    println("NSE: "*string(-l))
+    return false
+
+end
+
 
 function gr4j(params, output_times)
 
@@ -95,7 +113,7 @@ function gr4j(params, output_times)
         dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
 
         Q9 = Φ*Quh
-        F = (x2 / x3^ω) * R^ω
+        F = (x2 / x3^ω) * max(R,0)^ω
         Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
         dR = Q9 + F - Qr
 
@@ -123,6 +141,36 @@ ODEparams = [1000.0, 2.0, 200.0, 2.5]
 params = vcat(ones(nres+2), ODEparams)
 times = 1.0:Δt:1095.0
 Q = gr4j(params, times)
+
+
+# loss_function(p) = NSE_loss(gr4j, p, train_Y, train_points)
+# loss_function(params)
+
+# initial_params = params
+
+
+# opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
+
+# opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
+
+# optimizer = ADAM(0.1)
+# sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=50)
+
+# #test data
+# out_params = sol.u
+# times = train_ + 1:Δt:data_points[end]
+
+# Q_nn = gr4j(out_params, times)
+
+# plot(times, Q_nn)
+# plot!(times, df[(train_ +1):end,:streamflow], dpi = 300)
+# plot!(times,Q_nn)
+
+
+
+# savefig("chepe_plot_gr4j_itr200.png")
+
+
 
 function gr4jsnow(params, output_times)
 
@@ -155,13 +203,13 @@ function gr4jsnow(params, output_times)
         dS = Ps - Es - Perc + snowmelt
 
         Pr = Pn - Ps + Perc
-        Qsh = (nres-1)/x4 * Sh[1:end]
-        Quh = (nres-1)/x4 * Sh[end]
+        Qsh = (nres-1)*x4 * Sh[1:end]   #x4 = 1/x4  --------
+        Quh = (nres-1)*x4 * Sh[end]
         dSh1 = Pr - Qsh[1]
         dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
 
         Q9 = Φ*Quh
-        F = (x2 / x3^ω) * R^ω
+        F = (x2 / x3^ω) * max(0,R)^ω
         Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
         dR = Q9 + F - Qr
 
@@ -182,7 +230,7 @@ function gr4jsnow(params, output_times)
     Qd = max.(0, (1-Φ) .* Quh .- F)
     Q = Qr + Qd
 
-    return Q, sol
+    return Q
     
 end
 
@@ -191,9 +239,37 @@ params = vcat(ones(nres+3), ODEparams)
 times = 1.0:Δt:data_points[end]
 Qsnow, sol = gr4jsnow(params, times)
 
-#plot(times, sol[2,:])
-#plot!(times, Qsnow./2)
-#plot!(times,Q./2)
+
+# loss_function(p) = NSE_loss(gr4jsnow, p, train_Y, train_points)
+# loss_function(params)
+
+# initial_params = params
+
+
+# opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
+
+# opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
+
+# optimizer = ADAM(0.1)
+# sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=70)
+
+# #test data
+# out_params = sol.u
+# times = train_ + 1:Δt:data_points[end]
+
+# Q_nn = gr4jsnow(out_params, times)
+
+# plot(times, Q_nn)
+# plot!(times, df[(train_ +1):end,:streamflow], dpi = 300)
+# plot!(times,Q_nn)
+
+
+
+# savefig("chepe_plot_gr4jsnow_itr200.png")
+
+
+
+
 
 
 function gr4jsnowNN(params, output_times, ann)
@@ -237,13 +313,13 @@ function gr4jsnowNN(params, output_times, ann)
         dS = Ps - Es - Perc + snowmelt
 
         Pr = Pn - Ps + Perc
-        Qsh = (nres-1)/x4 * Sh[1:end]
+        Qsh = (nres-1)/x4 * Sh[1:end]   #x4 = 1/x4
         Quh = (nres-1)/x4 * Sh[end]
         dSh1 = Pr - Qsh[1]
         dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
 
         Q9 = Φ*Quh
-        F = (x2 / x3^ω) * R^ω
+        F = (x2 / x3^ω) * max(0,R)^ω    # avoid complex number
         Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
         dR = Q9 + F - Qr
 
@@ -288,41 +364,25 @@ initial_params = ComponentArray(ODE_states=ODE_states, ODEparams=ODEparams, NNpa
 gr4jsnowNN(initial_params, train_points, ann)
 UDE_model(params, output_times) = gr4jsnowNN(params, output_times, ann)
 
-function NSE_loss(model, params, target_data, target_time)
-
-    predicted_data = model(params, target_time)
-    NSE(obs, pred) = 1 - sum((obs .- pred).^2) / sum((obs .- mean(obs)).^2)
-    loss = -NSE(target_data, predicted_data)
-
-    return loss 
-
-end
-
 loss_function(p) = NSE_loss(UDE_model, p, train_Y, train_points)
 loss_function(initial_params)
 
-function callback(p, l)
 
-    println("NSE: "*string(-l))
-    return false
-
-end
 
 opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
 
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
 optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=2)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=70)
 
 out_params = sol.u
 times = 1.0:Δt:train_
 
-Q_nn = gr4jsnowNN(out_params, times, ann)
-
-plot(times, Q_nn)
-plot!(times, df[1:train_,:streamflow], dpi = 300)
-plot!(times,Q_nn)
+# Q_nn = gr4jsnowNN(out_params, times, ann)
+# plot(times, Q_nn)
+# plot!(times, df[1:train_,:streamflow], dpi = 300)
+# plot!(times,Q_nn)
 
 #test data
 times = train_ + 1:Δt:data_points[end]
@@ -336,4 +396,4 @@ plot!(times,Q_nn)
 
 
 
-# savefig("chepe_plot.png")
+savefig("chepe_plot_gr4jsnowNN_itr70.png")
