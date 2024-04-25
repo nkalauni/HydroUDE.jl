@@ -1,14 +1,15 @@
-# Load all external packages
+
+# Change current directory to parent folder.
 cd(@__DIR__)
 cd("..")
 pwd()
 
+# Load all external packages
 using Revise
 
 using DataFrames, Dates, Statistics
 using CSV
 
-# using DifferentialEquations
 using OrdinaryDiffEq
 # using Lux, DiffEqFlux
 using Lux
@@ -24,27 +25,36 @@ using Interpolations
 using Plots
 
 using Random
-Random.seed!(300)
+Random.seed!(300)   #Seed for reproducibility
 
-df = CSV.read("src/chepe_data.csv", DataFrame; dateformat="mm/dd/yyyy")
 
-interpolate_method = SteffenMonotonicInterpolation()
+# Read data and preprocessing
+df = CSV.read("data/modified_chepe_data.csv", DataFrame; dateformat="mm/dd/yyyy")
 
-const Δt = 1.0
+# Interpolate to generate continuous data
 data_points = collect(1:nrow(df))
+interpolate_method = SteffenMonotonicInterpolation()
 
 temp = interpolate(data_points, df[:,:temperature], interpolate_method)
 prec = interpolate(data_points, df[:,:precipitation], interpolate_method)
 pet = interpolate(data_points, df[:,:pet], interpolate_method)
 flow = df[:, :streamflow]
 
+# Split data for training and testing 
 const split_ratio = 0.7
 train_ = Int(round(split_ratio * nrow(df)))
 test_ = nrow(df) - train_
 
+# Split training data into feature and target
 train_Y = flow[1:train_]
 train_points = collect(1:train_)
 
+
+# Define time interval for ODE solver and redefine data_points accordingly
+const Δt = 1.0
+data_points = collect(1:Δt:nrow(df))
+
+# Define model constants for GR4J model
 const α = 2
 const β = 5
 const γ = 5
@@ -55,7 +65,6 @@ const ν = 4/9
 const Uₜ = 1
 const nres = 11
 
-data_points = collect(1:Δt:nrow(df))
 
 function gr4j(params, output_times)
 
@@ -304,7 +313,7 @@ opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
 optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=10)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=2)
 
 out_params = sol.u
 times = 1.0:Δt:train_
