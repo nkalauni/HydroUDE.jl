@@ -1,7 +1,8 @@
 # Load all external packages
 cd(@__DIR__)
 cd("..")
-pwd()
+
+using Pkg; Pkg.activate(".")
 
 using Revise
 
@@ -10,13 +11,17 @@ using CSV
 
 # using DifferentialEquations
 using OrdinaryDiffEq
-# using Lux, DiffEqFlux
-using Lux
+using Lux, DiffEqFlux
+# using Lux
 using ComponentArrays
 using SciMLSensitivity
 
-using Optimization, OptimizationBBO
+using Optimization
+using OptimizationBBO
+using OptimizationOptimJL
 using OptimizationOptimisers
+
+using ForwardDiff
 using Zygote
 
 using Interpolations
@@ -54,6 +59,9 @@ const Φ = 0.9
 const ν = 4/9
 const Uₜ = 1
 const nres = 11
+const SMOOTHER = 0.01
+
+smoothing_function(x) = (sqrt(x^2 + SMOOTHER^2) + x) / 2
 
 data_points = collect(1:Δt:nrow(df))
 
@@ -72,10 +80,12 @@ function gr4j(params, output_times)
         P = prec(t)
         Ep = pet(t)
 
-        Pn = max(P - Ep, zero(P))
-        Ps = Pn * (1 - (S / x1)^α)
-        En = max(Ep - P, zero(P))
-        Es = En * (2 * S / x1 - (S / x1)^α)
+        # Pn = max(P - Ep, 0.0)
+        Pn = smoothing_function(P-Ep)
+        Ps = smoothing_function(Pn * (1 - (S / x1)^α))
+        # En = max(Ep - P, 0.0)
+        En = smoothing_function(Ep - P)
+        Es = smoothing_function(En * (2 * S / x1 - (S / x1)^α))
         Perc = x1^(1-β) / (Uₜ*(β-1)) * ν^(β-1) * S^β
         dS = Ps - Es - Perc
 
@@ -86,7 +96,7 @@ function gr4j(params, output_times)
         dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
 
         Q9 = Φ*Quh
-        F = (x2 / x3^ω) * R^ω
+        F = x2 * (smoothing_function(R) / smoothing_function(x3))^ω
         Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
         dR = Q9 + F - Qr
 
@@ -98,7 +108,7 @@ function gr4j(params, output_times)
     end
 
     prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
-    sol = solve(prob, saveat = Δt, Tsit5())
+    sol = solve(prob, saveat = Δt,TRBDF2())
 
     Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
     F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
@@ -111,9 +121,55 @@ function gr4j(params, output_times)
 end
 
 ODEparams = [1000.0, 2.0, 200.0, 2.5]
-params = vcat(ones(nres+2), ODEparams)
-times = 1.0:Δt:1095.0
+params = vcat(ones(nres+2) .* 50.0, ODEparams)
+lower_bound = vcat(ones(nres+2), [1.0, -20.0, 1.0, 0.5])
+upper_bound = vcat(ones(nres+2) .* 2000.0, [2000.0, 20.0, 300.0, 15.0])
+times = 1.0:Δt:train_
 Q = gr4j(params, times)
+
+# UDE_model(params, output_times) = gr4jsnowNN(params, output_times, ann)
+
+function NSE_loss(model, params, target_data, target_time)
+
+    predicted_data = model(params, target_time)
+    NSE(obs, pred) = 1 - sum((obs .- pred).^2) / sum((obs .- mean(obs)).^2)
+    loss = -NSE(target_data, predicted_data)
+
+    return loss 
+
+end
+
+function MSE_loss(model, params, target_data, target_time)
+
+    predicted_data = model(params, target_time)
+    MSE(obs, pred) = sum((obs .- pred).^2)
+    loss = MSE(target_data, predicted_data)
+
+    return loss
+
+end
+
+loss_function(p) = MSE_loss(gr4j, p, train_Y, times)
+loss_function(params)
+
+current_param = []
+
+function callback(p, l)
+
+    push!(current_param, p)
+    println("MSE: "*string(l))
+    return false
+
+end
+
+opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoForwardDiff())
+
+opt_problem = Optimization.OptimizationProblem(opt_func, params, lb=lower_bound, ub=upper_bound)
+# opt_problem = Optimization.OptimizationProblem(opt_func, params)
+
+optimizer = BBO_adaptive_de_rand_1_bin_radiuslimited()
+# optimizer = ADAM(0.1)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=100000)
 
 function gr4jsnow(params, output_times)
 
