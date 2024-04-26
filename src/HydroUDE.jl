@@ -24,6 +24,14 @@ using Interpolations
 
 using Plots
 
+# using Pkg
+# Pkg.add("JSON")
+# using JSON
+
+# using Pkg
+# Pkg.add("JLD2")
+using JLD2
+
 using Random
 Random.seed!(300)   #Seed for reproducibility
 
@@ -77,6 +85,20 @@ function NSE_loss(model, params, target_data, target_time)
 end
 
 function callback(p, l)
+
+    #txt save
+    open("chepe_log_file.txt", "w") do file
+        write(file, "NSE: "*string(-l)*", "*string(p.u))
+    end
+
+    #json save
+    # open("chepe_.json", "w") do f
+    #     JSON.print(f, p.u, 4)  # The '4' here specifies the indentation level for pretty printing
+    # end
+
+    #jld save
+    save_object("chepe_params.jld", p.u)
+
 
     println("NSE: "*string(-l))
     return false
@@ -374,10 +396,10 @@ opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
 optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=70)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=1000000)
 
-out_params = sol.u
-times = 1.0:Δt:train_
+# out_params = sol.u
+# times = 1.0:Δt:train_
 
 # Q_nn = gr4jsnowNN(out_params, times, ann)
 # plot(times, Q_nn)
