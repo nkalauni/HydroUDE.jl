@@ -25,6 +25,6 @@ docs/site/
 Manifest.toml
 
 #DATA FILES
-*.jld
+# *.jld
 *.txt
 *.json

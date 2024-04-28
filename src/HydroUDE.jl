@@ -99,6 +99,16 @@ function callback(p, l)
     #jld save
     save_object("chepe_params.jld", p.u)
 
+    #image save
+    println("Updating plot")
+    times = train_ + 1:Δt:data_points[end]
+    
+    Q_nn = gr4jsnowNN(p.u, times, ann)
+    
+    plot(times, df[(train_ +1):end,:streamflow], dpi = 300)
+    plot!(times,Q_nn, title="NSE: "*string(-l))
+    
+    savefig("src/runtime_plot.png")
 
     println("NSE: "*string(-l))
     return false
@@ -383,20 +393,22 @@ ODE_states = ones(nres+3)
 # initial_params = (ODE_states, ODEparams, initial_NN_params)
 initial_params = ComponentArray(ODE_states=ODE_states, ODEparams=ODEparams, NNparams=initial_NN_params)
 
+
+#Load initial_params from JLD:
+initial_params = load_object("chepe_params.jld")
+
 gr4jsnowNN(initial_params, train_points, ann)
 UDE_model(params, output_times) = gr4jsnowNN(params, output_times, ann)
 
 loss_function(p) = NSE_loss(UDE_model, p, train_Y, train_points)
 loss_function(initial_params)
 
-
-
 opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
 
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
 optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=1000000)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=100000)
 
 # out_params = sol.u
 # times = 1.0:Δt:train_
@@ -418,4 +430,4 @@ plot!(times,Q_nn)
 
 
 
-savefig("chepe_plot_gr4jsnowNN_itr70.png")
+# savefig("chepe_plot_gr4jsnowNN_itr70.png")
