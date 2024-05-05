@@ -1,433 +1,79 @@
+includet("startup.jl")
+include("load_data.jl")
+includet("utils.jl")
+includet("models.jl")
 
-# Change current directory to parent folder.
-cd(@__DIR__)
-cd("..")
-pwd()
-
-# Load all external packages
-using Revise
-
-using DataFrames, Dates, Statistics
-using CSV
-
-using OrdinaryDiffEq
-# using Lux, DiffEqFlux
-using Lux
-using ComponentArrays
-using SciMLSensitivity
-
-using Optimization, OptimizationBBO
-using OptimizationOptimisers
-using Zygote
-
-using Interpolations
-
-using Plots
-
-# using Pkg
-# Pkg.add("JSON")
-# using JSON
-
-# using Pkg
-# Pkg.add("JLD2")
-using JLD2
-
-using Random
-Random.seed!(300)   #Seed for reproducibility
-
-
-# Read data and preprocessing
-df = CSV.read("data/modified_chepe_data.csv", DataFrame; dateformat="mm/dd/yyyy")
-
-# Interpolate to generate continuous data
-data_points = collect(1:nrow(df))
-interpolate_method = SteffenMonotonicInterpolation()
-
-temp = interpolate(data_points, df[:,:temperature], interpolate_method)
-prec = interpolate(data_points, df[:,:precipitation], interpolate_method)
-pet = interpolate(data_points, df[:,:pet], interpolate_method)
-flow = df[:, :streamflow]
-
-# Split data for training and testing 
-const split_ratio = 0.7
-train_ = Int(round(split_ratio * nrow(df)))
-test_ = nrow(df) - train_
-
-# Split training data into feature and target
-train_Y = flow[1:train_]
-train_points = collect(1:train_)
-
-
-# Define time interval for ODE solver and redefine data_points accordingly
-const Δt = 1.0
-data_points = collect(1:Δt:nrow(df))
-
-# Define model constants for GR4J model
-const α = 2
-const β = 5
-const γ = 5
-const ω = 3.5
-const ϵ = 1.5
-const Φ = 0.9
-const ν = 4/9
-const Uₜ = 1
-const nres = 11
-
-# loss function:
-function NSE_loss(model, params, target_data, target_time)
-
-    predicted_data = model(params, target_time)
-    NSE(obs, pred) = 1 - sum((obs .- pred).^2) / sum((obs .- mean(obs)).^2)
-    loss = -NSE(target_data, predicted_data)
-
-    return loss 
-
-end
-
-function callback(p, l)
-
-    #txt save
-    open("chepe_log_file.txt", "w") do file
-        write(file, "NSE: "*string(-l)*", "*string(p.u))
-    end
-
-    #json save
-    # open("chepe_.json", "w") do f
-    #     JSON.print(f, p.u, 4)  # The '4' here specifies the indentation level for pretty printing
-    # end
-
-    #jld save
-    save_object("chepe_params.jld", p.u)
-
-    #image save
-    println("Updating plot")
-    times = train_ + 1:Δt:data_points[end]
-    
-    Q_nn = gr4jsnowNN(p.u, times, ann)
-    
-    plot(times, df[(train_ +1):end,:streamflow], dpi = 300)
-    plot!(times,Q_nn, title="NSE: "*string(-l))
-    
-    savefig("src/runtime_plot.png")
-
-    println("NSE: "*string(-l))
-    return false
-
-end
-
-
-function gr4j(params, output_times)
-
-    X0 = params[1:nres+2]
-    ODEparams = params[nres+3:end]
-
-    time_span = (output_times[1], output_times[end])
-
-    function odesystem!(dX, X, p, t)
-        x1, x2, x3, x4 = p
-        S, R = X[1], X[end]
-        Sh = X[2:end-1]
-
-        P = prec(t)
-        Ep = pet(t)
-
-        Pn = max(P - Ep, zero(P))
-        Ps = Pn * (1 - (S / x1)^α)
-        En = max(Ep - P, zero(P))
-        Es = En * (2 * S / x1 - (S / x1)^α)
-        Perc = x1^(1-β) / (Uₜ*(β-1)) * ν^(β-1) * S^β
-        dS = Ps - Es - Perc
-
-        Pr = Pn - Ps + Perc
-        Qsh = (nres-1)/x4 * Sh[1:end]
-        Quh = (nres-1)/x4 * Sh[end]
-        dSh1 = Pr - Qsh[1]
-        dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
-
-        Q9 = Φ*Quh
-        F = (x2 / x3^ω) * max(R,0)^ω
-        Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
-        dR = Q9 + F - Qr
-
-        dX[1] = dS
-        dX[2] = dSh1
-        dX[3:end-1] = dSh
-        dX[end] = dR
-
-    end
-
-    prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
-    sol = solve(prob, saveat = Δt, Tsit5())
-
-    Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
-    F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
-    Qr = ODEparams[3]^(1-γ) / (Uₜ*(γ-1)) .* sol[end,:].^γ
-    Qd = max.(0, (1-Φ) .* Quh .- F)
-    Q = Qr + Qd
-
-    return Q
-    
-end
-
+# ## GR4J
+# optimize 4 params + initial states.
 ODEparams = [1000.0, 2.0, 200.0, 2.5]
-params = vcat(ones(nres+2), ODEparams)
-times = 1.0:Δt:1095.0
-Q = gr4j(params, times)
+ODEstates = ones(nres+2)
+initial_params = vcat(ODEstates, ODEparams)
 
+# define loss function
+loss_function(p) = NSE_loss(gr4j, p, train_Y, train_points)
 
-# loss_function(p) = NSE_loss(gr4j, p, train_Y, train_points)
-# loss_function(params)
-
-# initial_params = params
-
-
-# opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
-
-# opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
-
-# optimizer = ADAM(0.1)
-# sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=50)
-
-# #test data
-# out_params = sol.u
-# times = train_ + 1:Δt:data_points[end]
-
-# Q_nn = gr4j(out_params, times)
-
-# plot(times, Q_nn)
-# plot!(times, df[(train_ +1):end,:streamflow], dpi = 300)
-# plot!(times,Q_nn)
-
-
-
-# savefig("chepe_plot_gr4j_itr200.png")
-
-
-
-function gr4jsnow(params, output_times)
-
-    X0 = params[1:nres+3]
-    ODEparams = params[nres+4:end]
-
-    time_span = (output_times[1], output_times[end])
-
-    function odesystem!(dX, X, p, t)
-        x1, x2, x3, x4, TRS, TRANS, DDF, Tbase = p
-        S, R = X[1], X[end]
-        Snow = X[2]
-        Sh = X[3:end-1]
-
-        P = prec(t)
-        Ep = pet(t)
-        T = temp(t)
-
-        snowfrac = min(max((TRS + TRANS - T)/(2*TRANS), zero(T)), one(T))
-        Psnow = P*snowfrac
-        snowmelt = max(zero(Snow), min(DDF*(T-Tbase), Snow))
-        dSnow = Psnow - snowmelt
-
-        P = P - Psnow
-        Pn = max(P - Ep, zero(P))
-        Ps = Pn * (1 - (S / x1)^α)
-        En = max(Ep - P, zero(P))
-        Es = En * (2 * S / x1 - (S / x1)^α)
-        Perc = x1^(1-β) / (Uₜ*(β-1)) * ν^(β-1) * S^β
-        dS = Ps - Es - Perc + snowmelt
-
-        Pr = Pn - Ps + Perc
-        Qsh = (nres-1)*x4 * Sh[1:end]   #x4 = 1/x4  --------
-        Quh = (nres-1)*x4 * Sh[end]
-        dSh1 = Pr - Qsh[1]
-        dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
-
-        Q9 = Φ*Quh
-        F = (x2 / x3^ω) * max(0,R)^ω
-        Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
-        dR = Q9 + F - Qr
-
-        dX[1] = dS
-        dX[2] = dSnow
-        dX[3] = dSh1
-        dX[4:end-1] = dSh
-        dX[end] = dR
-
-    end
-
-    prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
-    sol = solve(prob, saveat = Δt,Tsit5())
-
-    Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
-    F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
-    Qr = ODEparams[3]^(1-γ) / (Uₜ*(γ-1)) .* sol[end,:].^γ
-    Qd = max.(0, (1-Φ) .* Quh .- F)
-    Q = Qr + Qd
-
-    return Q
-    
-end
-
-ODEparams = [1000.0, 2.0, 200.0, 2.5, 10.0, 13.0, 15.0, 0.0]
-params = vcat(ones(nres+3), ODEparams)
-times = 1.0:Δt:data_points[end]
-Qsnow, sol = gr4jsnow(params, times)
-
-
-# loss_function(p) = NSE_loss(gr4jsnow, p, train_Y, train_points)
-# loss_function(params)
-
-# initial_params = params
-
-
-# opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
-
-# opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
-
-# optimizer = ADAM(0.1)
-# sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=70)
-
-# #test data
-# out_params = sol.u
-# times = train_ + 1:Δt:data_points[end]
-
-# Q_nn = gr4jsnow(out_params, times)
-
-# plot(times, Q_nn)
-# plot!(times, df[(train_ +1):end,:streamflow], dpi = 300)
-# plot!(times,Q_nn)
-
-
-
-# savefig("chepe_plot_gr4jsnow_itr200.png")
-
-
-
-
-
-
-function gr4jsnowNN(params, output_times, ann)
-
-    # X0 = params[1:nres+3]
-    # X0 = params[1]
-    X0 = params.ODE_states
-    # ODEparams = params[nres+4:nres+7]
-    # ODEparams = params[2]
-    ODEparams = params.ODEparams
-    # NNparams = params[end]
-
-    time_span = (output_times[1], output_times[end])
-
-    function odesystem!(dX, X, p, t)
-        # NNparams = ComponentArray(p[end])
-        NNparams = p.NNparams
-        # ODEparams = p[nres+4:end-1]
-        ODEparams = p.ODEparams
-        x1, x2, x3, x4 = ODEparams
-        S, R = X[1], X[end]
-        Snow = X[2]
-        Sh = X[3:end-1]
-
-        P = prec(t)
-        Ep = pet(t)
-        T = temp(t)
-
-        ann_outputs = ann([Snow, P, T], NNparams)
-        snowfrac = ann_outputs[1]
-        Psnow = P*snowfrac
-        snowmelt = ann_outputs[2]
-        dSnow = Psnow - snowmelt
-
-        P = P - Psnow
-        Pn = max(P - Ep, zero(P))
-        Ps = Pn * (1 - (S / x1)^α)
-        En = max(Ep - P, zero(P))
-        Es = En * (2 * S / x1 - (S / x1)^α)
-        Perc = x1^(1-β) / (Uₜ*(β-1)) * ν^(β-1) * S^β
-        dS = Ps - Es - Perc + snowmelt
-
-        Pr = Pn - Ps + Perc
-        Qsh = (nres-1)/x4 * Sh[1:end]   #x4 = 1/x4
-        Quh = (nres-1)/x4 * Sh[end]
-        dSh1 = Pr - Qsh[1]
-        dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
-
-        Q9 = Φ*Quh
-        F = (x2 / x3^ω) * max(0,R)^ω    # avoid complex number
-        Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
-        dR = Q9 + F - Qr
-
-        dX[1] = dS
-        dX[2] = dSnow
-        dX[3] = dSh1
-        dX[4:end-1] = dSh
-        dX[end] = dR
-
-    end
-
-    prob = ODEProblem(odesystem!, X0, time_span, params)
-    sol = solve(prob, saveat = Δt,Tsit5())
-
-    Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
-    F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
-    Qr = ODEparams[3]^(1-γ) / (Uₜ*(γ-1)) .* sol[end,:].^γ
-    Qd = max.(0, (1-Φ) .* Quh .- F)
-    Q = Qr + Qd
-
-    return Q
-    
-end
-
-function initializeNN()
-    rng = Random.default_rng()
-    NNmodel = Lux.Chain(Lux.Dense(3, 16, tanh), Lux.Dense(16, 16, leakyrelu), Lux.Dense(16, 16, leakyrelu), Lux.Dense(16, 16, leakyrelu), Lux.Dense(16,2,tanh))
-    p_NN_init, st_NN_init = Lux.setup(rng, NNmodel)
-    ann(x, p) = NNmodel(x, p, st_NN_init)[1]
-    # p_NN_init = ComponentArray(p_NN_init)
-
-    return ann, p_NN_init
-
-end
-
-ann, initial_NN_params = initializeNN()
-ODEparams = [1000.0, 2.0, 200.0, 2.5]
-ODE_states = ones(nres+3)
-# initial_params = (ODE_states, ODEparams, initial_NN_params)
-initial_params = ComponentArray(ODE_states=ODE_states, ODEparams=ODEparams, NNparams=initial_NN_params)
-
-
-#Load initial_params from JLD:
-initial_params = load_object("chepe_params.jld")
-
-gr4jsnowNN(initial_params, train_points, ann)
-UDE_model(params, output_times) = gr4jsnowNN(params, output_times, ann)
-
-loss_function(p) = NSE_loss(UDE_model, p, train_Y, train_points)
-loss_function(initial_params)
-
+# define optimization  function
 opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
 
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
 optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=100000)
-
-# out_params = sol.u
-# times = 1.0:Δt:train_
-
-# Q_nn = gr4jsnowNN(out_params, times, ann)
-# plot(times, Q_nn)
-# plot!(times, df[1:train_,:streamflow], dpi = 300)
-# plot!(times,Q_nn)
-
-#test data
-times = train_ + 1:Δt:data_points[end]
-
-Q_nn = gr4jsnowNN(out_params, times, ann)
-
-plot(times, Q_nn)
-plot!(times, df[(train_ +1):end,:streamflow], dpi = 300)
-plot!(times,Q_nn)
+# sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=50)
+#save optimized parameters
+# save_object("optim_vars/gr4j_state-params.jld", sol.u)
 
 
 
+# * optimize 4 params starting with optimized initial states.
+parameters = load_object("optim_vars/gr4j_state-params.jld")
+ODEstates = parameters[1:nres+2]
+ODEparams = parameters[nres+3:end]
 
-# savefig("chepe_plot_gr4jsnowNN_itr70.png")
+GR4J_model(ODEparams, train_points, ODEstates)
+
+
+#Model wrapper
+Wrapper_model(p, t) = GR4J_model(p, t, ODEstates)
+
+Wrapper_model(ODEparams, train_points)
+# define loss function
+loss_function(p) = NSE_loss(Wrapper_model, p, train_Y, train_points)
+loss_function(ODEparams)
+
+callback_function(p,l) = callback(Wrapper_model, p, l)
+
+# define optimization  function
+opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
+
+opt_problem = Optimization.OptimizationProblem(opt_func, ODEparams)
+
+optimizer = ADAM(0.1)
+sol = Optimization.solve(opt_problem, optimizer, callback = callback_function, maxiters=1000)
+
+#save optimized parameters
+# save_object("optim_vars/gr4j_params.jld", load_object("chepe_params.jld"))
+
+optm_params = load_object("optim_vars/gr4j_params.jld")
+
+div = Int(round(length(train_points)/2))
+train_points = train_points[1:div]
+train_Y = train_Y[1:div]
+
+Q_nn = Wrapper_model(optm_params, train_points)
+plot(train_points, train_Y, dpi = 300)
+plot!(train_points, Q_nn, title="NSE: "*string(-NSE_loss(Wrapper_model, optm_params, train_Y, train_points)))
+
+
+
+Q_nn = Wrapper_model(optm_params, test_times)
+plot(test_times, df[(train_ +1):end,:streamflow], dpi = 300)
+plot!(test_times,Q_nn, title="NSE: "*string(-NSE_loss(Wrapper_model, optm_params, test_Y, test_points)))
+
+
+
+
+
+
+
+# ## GR4JsnowNN
+# * optimize NN params starting with optimized 4 params from GR4J.
