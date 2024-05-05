@@ -7,11 +7,12 @@ using Pkg; Pkg.activate(".")
 using Revise
 
 using DataFrames, Dates, Statistics
-using CSV
+using CSV, DelimitedFiles
 
 # using DifferentialEquations
 using OrdinaryDiffEq
 using Lux, DiffEqFlux
+using LuxCUDA
 # using Lux
 using ComponentArrays
 using SciMLSensitivity
@@ -20,6 +21,7 @@ using Optimization
 using OptimizationBBO
 using OptimizationOptimJL
 using OptimizationOptimisers
+using OptimizationCMAEvolutionStrategy
 
 using ForwardDiff
 using Zygote
@@ -31,7 +33,14 @@ using Plots
 using Random
 Random.seed!(300)
 
-df = CSV.read("src/chepe_data.csv", DataFrame; dateformat="mm/dd/yyyy")
+include("src/helpers/data_loader.jl")
+
+basin_id = "01013500"
+data_path = "data/reduced_camels"
+
+df = load_camels_data(lpad(string(basin_id), 8, "0"), data_path)
+
+# df = load_nepal_data("data/chepe_data.csv")
 
 interpolate_method = SteffenMonotonicInterpolation()
 
@@ -39,11 +48,16 @@ const Δt = 1.0
 data_points = collect(1:nrow(df))
 
 temp = interpolate(data_points, df[:,:temperature], interpolate_method)
+# temp = interpolate(data_points, df[:,"Tmean(C)"], interpolate_method)
 prec = interpolate(data_points, df[:,:precipitation], interpolate_method)
+# prec = interpolate(data_points, df[:,"Prec(mm/day)"], interpolate_method)
 pet = interpolate(data_points, df[:,:pet], interpolate_method)
+# pet_arr = PET.(df[:,"Tmean(C)"], df[:, "Daylight(h)"])
+# pet = interpolate(data_points, pet_arr, interpolate_method)
 flow = df[:, :streamflow]
+# flow = df[:, "Flow(mm/s)"]
 
-const split_ratio = 0.7
+split_ratio = 0.5
 train_ = Int(round(split_ratio * nrow(df)))
 test_ = nrow(df) - train_
 
@@ -90,8 +104,8 @@ function gr4j(params, output_times)
         dS = Ps - Es - Perc
 
         Pr = Pn - Ps + Perc
-        Qsh = (nres-1)/x4 * Sh[1:end]
-        Quh = (nres-1)/x4 * Sh[end]
+        Qsh = (nres-1)*x4 * Sh[1:end]
+        Quh = (nres-1)*x4 * Sh[end]
         dSh1 = Pr - Qsh[1]
         dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
 
@@ -149,7 +163,7 @@ function MSE_loss(model, params, target_data, target_time)
 
 end
 
-loss_function(p) = MSE_loss(gr4j, p, train_Y, times)
+loss_function(p) = NSE_loss(gr4j, p, train_Y, times)
 loss_function(params)
 
 current_param = []
@@ -157,7 +171,7 @@ current_param = []
 function callback(p, l)
 
     push!(current_param, p)
-    println("MSE: "*string(l))
+    println("NSE: "*string(-l))
     return false
 
 end
@@ -167,9 +181,10 @@ opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(
 opt_problem = Optimization.OptimizationProblem(opt_func, params, lb=lower_bound, ub=upper_bound)
 # opt_problem = Optimization.OptimizationProblem(opt_func, params)
 
-optimizer = BBO_adaptive_de_rand_1_bin_radiuslimited()
+# optimizer = BBO_adaptive_de_rand_1_bin_radiuslimited()
 # optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=100000)
+optimizer = CMAEvolutionStrategyOpt()
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=1000)
 
 function gr4jsnow(params, output_times)
 
@@ -229,14 +244,30 @@ function gr4jsnow(params, output_times)
     Qd = max.(0, (1-Φ) .* Quh .- F)
     Q = Qr + Qd
 
-    return Q, sol
+    return Q 
     
 end
 
 ODEparams = [1000.0, 2.0, 200.0, 2.5, 10.0, 13.0, 15.0, 0.0]
 params = vcat(ones(nres+3), ODEparams)
-times = 1.0:Δt:data_points[end]
+lower_bound = vcat(ones(nres+3), [1.0, -20.0, 1.0, 0.5, -35.0, -30.0, 0.5, -30.0])
+upper_bound = vcat(ones(nres+3) .* 2000.0, [2000.0, 20.0, 300.0, 15.0, 30.0, 35.0, 30.0, 30.0])
+
+times = 1.0:Δt:train_
 Qsnow, sol = gr4jsnow(params, times)
+
+loss_function(p) = NSE_loss(gr4jsnow, p, train_Y, times)
+loss_function(params)
+
+opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoForwardDiff())
+
+opt_problem = Optimization.OptimizationProblem(opt_func, params, lb=lower_bound, ub=upper_bound)
+# opt_problem = Optimization.OptimizationProblem(opt_func, params)
+
+# optimizer = BBO_adaptive_de_rand_1_bin_radiuslimited()
+# optimizer = ADAM(0.1)
+optimizer = CMAEvolutionStrategyOpt()
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=1000)
 
 #plot(times, sol[2,:])
 #plot!(times, Qsnow./2)
