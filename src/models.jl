@@ -64,8 +64,13 @@ end
 
 function gr4jsnow(params, output_times, args...)
 
-    X0 = params[1:nres+3]
-    ODEparams = params[nres+4:end]
+    if length(args)>0
+        X0 = args[1]    #initial_parameters
+        ODEparams = parameters
+    else
+        X0 = parameters[1:nres+2]
+        ODEparams = parameters[nres+3:end]
+    end
 
     time_span = (output_times[1], output_times[end])
 
