@@ -1,7 +1,7 @@
-includet("startup.jl")
-include("load_data.jl")
-includet("utils.jl")
-includet("models.jl")
+include("src/startup.jl")
+include("src/load_data.jl")
+includet("src/utils.jl")
+includet("src/models.jl")
 
 # ## GR4J
 # optimize 4 params + initial states.
@@ -19,16 +19,23 @@ loss_function(initial_params)
 
 callback_function(p,l) = callback(Wrapper_model, p, l)
 
+# define lower and upper bounds on parameters
+lower_bound = vcat(ones(nres+2), [1.0, -20.0, 1.0, 0.5])
+upper_bound = vcat(ones(nres+2) .* 2000.0, [2000.0, 20.0, 300.0, 15.0])
+
 # define optimization  function
 opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
 
-opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
+# opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
+opt_problem = Optimization.OptimizationProblem(opt_func, initial_params, lb=lower_bound, ub=upper_bound)
 
-optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback_function, maxiters=100_000)
+# optimizer = ADAM(0.1)
+optimizer = NLopt.LD_LBFGS()
+# optimizer = PolyOpt()
+sol = Optimization.solve(opt_problem, optimizer, callback=callback_function, maxiters=1000)
 # save optimized parameters
 # save_object("optim_vars/gr4j_state-params.jld", sol.u)
-save_object("optim_vars/gr4j_state-params.jld", load_object("chepe_params.jld"))
+# save_object("optim_vars/gr4j_state-params.jld", load_object("chepe_params.jld"))
 
 
 # * optimize 4 params starting with optimized initial states.
