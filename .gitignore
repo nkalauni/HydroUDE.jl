@@ -21,9 +21,10 @@ docs/site/
 # It records a fixed state of all packages used by the project. As such, it should not be
 # committed for packages, but should be committed for applications that require a static
 # environment.
-<<<<<<< HEAD
 
 Manifest.toml
-=======
-Manifest.toml
->>>>>>> 514af55dc34187ccf2e51cc84739a1abf4c8b4de
+
+#DATA FILES
+# *.jld
+*.txt
+*.json
