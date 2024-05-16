@@ -141,7 +141,7 @@ function gr4jsnowNN(params, output_times, args...)
     if length(args)>0
         ann = args[1]
     else
-        throw(ArgumentError("यहाँले न्युरल नेटवर्क को मोडेल पठाउन बिर्सिनिनु भयो जस्तो छ, कृपया आर्गुमेंट पुन: निरिक्षण गर्नुहोस। "))
+        print("यहाँले न्युरल नेटवर्क को मोडेल पठाउन बिर्सिनिनु भयो जस्तो छ, कृपया आर्गुमेंट पुन: निरिक्षण गर्नुहोस। ")
     end
 
     # X0 = params[1:nres+3]
@@ -293,7 +293,7 @@ function gr4jsnowNN(params, output_times, ann)
     
     # X0 = params[1:nres+3]
     # X0 = params[1]
-    X0 = params.ODE_states
+    X0 = params.ODEstates
     # ODEparams = params[nres+4:nres+7]
     # ODEparams = params[2]
     ODEparams = params.ODEparams

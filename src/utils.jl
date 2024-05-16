@@ -1,7 +1,8 @@
+losses = Float64[]
 # generic loss function:
 function NSE_loss(model, params, target_data, target_time)
 
-    predicted_data, solution = model(params, target_time)
+    predicted_data = model(params, target_time)
     NSE(obs, pred) = 1 - sum((obs .- pred).^2) / sum((obs .- mean(obs)).^2)
     if size(predicted_data) == size(target_data)
         # println("size milyo!!! Yesss..... Data_size = $(size(target_data))......ODE solution size = $(size(predicted_data))")
@@ -23,7 +24,6 @@ function callback(model, p, l)
     end
 
     push!(losses, -l)
-
     #json save
     # open("chepe_.json", "w") do f
     #     JSON.print(f, p.u, 4)  # The '4' here specifies the indentation level for pretty printing
