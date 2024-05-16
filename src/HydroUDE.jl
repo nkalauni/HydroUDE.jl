@@ -1,93 +1,86 @@
-include("src/startup.jl")
-include("src/load_data.jl")
-includet("src/utils.jl")
-includet("src/models.jl")
+include("startup.jl")
+include("load_data.jl")
+include("utils.jl")
+include("models.jl")
+include(pwd()*"/src/optimize.jl")
 
-# ## GR4J
-# optimize 4 params + initial states.
+#define initial parameters
+# 4 fundamental parameters of the GR4J ODE system
 ODEparams = [1000.0, 2.0, 200.0, 2.5]
+
+# Vanilla GR4J
+# Initialize 4 params + initial states.
 ODEstates = ones(nres+2)
+
 initial_params = vcat(ODEstates, ODEparams)
+Wrapper_model(p,t) = GR4J_model(p,t)
+# optm_parameters = optimize_model(Wrapper_model, initial_params, maxitr=2)
+optm_parameters = load_object("optim_vars/gr4j_state-params.jld")
 
-#Model wrapper
-Wrapper_model(p, t) = GR4J_model(p, t)
-
-Wrapper_model(initial_params, train_points)
-# define loss function
-loss_function(p) = NSE_loss(Wrapper_model, p, train_Y, train_points)
-loss_function(initial_params)
-
-callback_function(p,l) = callback(Wrapper_model, p, l)
-
-# define lower and upper bounds on parameters
-lower_bound = vcat(ones(nres+2), [1.0, -20.0, 1.0, 0.5])
-upper_bound = vcat(ones(nres+2) .* 2000.0, [2000.0, 20.0, 300.0, 15.0])
-
-# define optimization  function
-opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
-
-# opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
-opt_problem = Optimization.OptimizationProblem(opt_func, initial_params, lb=lower_bound, ub=upper_bound)
-
-# optimizer = ADAM(0.1)
-optimizer = NLopt.LD_LBFGS()
-# optimizer = PolyOpt()
-sol = Optimization.solve(opt_problem, optimizer, callback=callback_function, maxiters=1000)
-# save optimized parameters
-# save_object("optim_vars/gr4j_state-params.jld", sol.u)
-# save_object("optim_vars/gr4j_state-params.jld", load_object("chepe_params.jld"))
-
+#save and plot the model
+save_model(optm_parameters, "t")
+plot_model(Wrapper_model, optm_parameters, portion="train", name="gr4j_sp")
+plot_model(Wrapper_model, optm_parameters, portion="test", name="gr4j_sp")
 
 # * optimize 4 params starting with optimized initial states.
-parameters = load_object("optim_vars/gr4j_state-params.jld")
-ODEstates = parameters[1:nres+2]
-# ODEparams = parameters[nres+3:end]
+ODEstates = optm_parameters[1:nres+2]    # Read ODEstates from previous optimization process
 
-GR4J_model(ODEparams, train_points, ODEstates)
-
-
-#Model wrapper
 Wrapper_model(p, t) = GR4J_model(p, t, ODEstates)
+# gr4j_params = optimize_model(Wrapper_model, ODEparams, maxitr = 2)
+gr4j_params = load_object("optim_vars/gr4j_params.jld")
 
+#save and plot the model
+save_model(gr4j_params, "t")
+plot_model(Wrapper_model, gr4j_params, portion="train", name="gr4j_p")
+plot_model(Wrapper_model, gr4j_params, portion="test", name="gr4j_p")
+
+# Vanilla GR4Jsnow
+# Initialize 8 params + initial states.
+ODEparams = [1000.0, 2.0, 200.0, 2.5, 10.0, 13.0, 15.0, 0.0]
+ODEstates = ones(nres+3)
+
+initial_params = vcat(ODEstates, ODEparams)
+Wrapper_model(p,t) = gr4jsnow(p,t)
+Wrapper_model(initial_params, train_points)
+gr4jsnow_sparams = optimize_model(Wrapper_model, initial_params, maxitr=2)
+# gr4jsnow_sparams = load_object("optim_v0ars/gr4j_state-params.jld")
+
+#save and plot the model
+save_model(gr4jsnow_sparams, "t")
+plot_model(Wrapper_model, gr4jsnow_sparams, portion="train", name="gr4jsnow_sp")
+plot_model(Wrapper_model, gr4jsnow_sparams, portion="test", name="gr4jsnow_sp")
+
+# * optimize NN params starting with optimized initial states from GR4Jsnow.
+
+ODEstates = gr4jsnow_sparams[1:nres+3]   # Read ODEstates from previous optimization process
+
+Wrapper_model(p, t) = gr4jsnow(p, t, ODEstates)
 Wrapper_model(ODEparams, train_points)
-# define loss function
-loss_function(p) = NSE_loss(Wrapper_model, p, train_Y, train_points)
-loss_function(ODEparams)
+gr4jsnow_params = optimize_model(Wrapper_model, ODEparams, maxitr = 2)
+# gr4j_params = load_object("optim_vars/gr4jsn_state-params.jld")
 
-callback_function(p,l) = callback(Wrapper_model, p, l)
+#save and plot the model
+save_model(gr4jsnow_params, "t")
+plot_model(Wrapper_model, gr4jsnow_params, portion="train", name="gr4jsnow_p")
+plot_model(Wrapper_model, gr4jsnow_params, portion="test", name="gr4jsnow_p")
 
-# define optimization  function
-opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
+# ## GR4JsnowNN--
 
-opt_problem = Optimization.OptimizationProblem(opt_func, ODEparams)
+# Vanilla GR4J
+# Initialize 4 params + initial states.
+ann, initial_NN_params = initializeNN()
+ODEparams = [1000.0, 2.0, 200.0, 2.5] # redefine ODE params
+# ODEstates = ones(nres+3)
+ODEstates = gr4jsnow_sparams[1:nres+3]  #use ODE states from gr4jsnow model.
 
-optimizer = ADAM(0.1)
-sol = Optimization.solve(opt_problem, optimizer, callback = callback_function, maxiters=100_000)
+initial_params = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNparams=initial_NN_params)
 
-#save optimized parameters
-save_object("optim_vars/gr4j_params.jld", load_object("chepe_params.jld"))
+Wrapper_model(p, t) = gr4jsnowNN(p, t, ann)
 
-optm_params = load_object("optim_vars/gr4j_params.jld")
+optm_parameters = optimize_model(g4jsnowNN, initial_params)
+# optm_parameters = load_object("optim_vars/gr4jsnowNN_params.jld")
 
-div = Int(round(length(train_points)/2))
-train_points = train_points[1:div]
-train_Y = train_Y[1:div]
-
-Q_nn = Wrapper_model(optm_params, train_points)
-plot(train_points, train_Y, dpi = 300)
-plot!(train_points, Q_nn, title="NSE: "*string(-NSE_loss(Wrapper_model, optm_params, train_Y, train_points)))
-
-
-
-Q_nn = Wrapper_model(optm_params, test_times)
-plot(test_times, df[(train_ +1):end,:streamflow], dpi = 300)
-plot!(test_times,Q_nn, title="NSE: "*string(-NSE_loss(Wrapper_model, optm_params, test_Y, test_points)))
-
-
-
-
-
-
-
-# ## GR4JsnowNN
-# * optimize NN params starting with optimized 4 params from GR4J.
+#save and plot the model
+save_model(optm_parameters, "t")
+plot_model(Wrapper_model, optm_parameters, portion="train", name="gr4jsnowNN_p")
+plot_model(Wrapper_model, optm_parameters, portion="test", name="gr4jsnowNN_p")
