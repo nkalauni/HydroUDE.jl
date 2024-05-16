@@ -75,15 +75,16 @@ ann, initial_NN_params = initializeNN()
 ODEparams = [1000.0, 2.0, 200.0, 2.5]
 ODE_states = ones(nres+3)
 # initial_params = (ODE_states, ODEparams, initial_NN_params)
-initial_params = ComponentArray(ODE_states=ODE_states, ODEparams=ODEparams, NNparams=initial_NN_params)
+initial_params = ComponentArray(ODEstates=ODE_states, ODEparams=ODEparams, NNparams=initial_NN_params)
 
 
 #Load initial_params from JLD:
-initial_params = load_object("chepe_params_tem.jld")
+# initial_params = load_object("chepe_params_tem.jld")
 
 gr4jsnowNN(initial_params, train_points, ann)
 UDE_model(params, output_times) = gr4jsnowNN(params, output_times, ann)
 
+# loss_function(p) = NSE_loss(Wrapper_model, p, train_Y, train_points)
 loss_function(p) = NSE_loss(UDE_model, p, train_Y, train_points)
 loss_function(initial_params)
 
@@ -92,8 +93,8 @@ opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(
 opt_problem = Optimization.OptimizationProblem(opt_func, initial_params)
 
 # optimizer = LBFGS()
-optimizer = ADAM(0.001)
-sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=100000)
+optimizer = ADAM(0.1)
+sol = Optimization.solve(opt_problem, optimizer, callback=callback, maxiters=2)
 
 # out_params = sol.u
 # times = 1.0:Δt:train_

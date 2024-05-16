@@ -62,21 +62,21 @@ function gr4j(params, output_times, args...)
     
 end
 
-function gr4jsnow(params, output_times, args...)
+function gr4jsnow(parameters, output_times, args...)
 
     if length(args)>0
         X0 = args[1]    #initial_parameters
         ODEparams = parameters
     else
-        X0 = parameters[1:nres+2]
-        ODEparams = parameters[nres+3:end]
+        X0 = parameters[1:nres+3]
+        ODEparams = parameters[nres+4:end]
     end
 
     time_span = (output_times[1], output_times[end])
 
     function odesystem!(dX, X, p, t)
         x1, x2, x3, x4, TRS, TRANS, DDF, Tbase = p
-        S, R = X[1], X[end]
+        S, R = X[1], X[end]  
         Snow = X[2]
         Sh = X[3:end-1]
 
@@ -129,17 +129,24 @@ function gr4jsnow(params, output_times, args...)
     
 end
 
+"""
+Function definiting gr4j model with NN for snow component.
+"""
 function gr4jsnowNN(params, output_times, args...)
-
-    try
+    # try
+    #     ann = args[1]
+    # catch e
+    #     throw(ArgumentError("यहाँले न्युरल नेटवर्क को मोडेल पठाउन बिर्सिनिनु भयो जस्तो छ, कृपया आर्गुमेंट पुन: निरिक्षण गर्नुहोस। "))
+    # end
+    if length(args)>0
         ann = args[1]
-    catch e
+    else
         throw(ArgumentError("यहाँले न्युरल नेटवर्क को मोडेल पठाउन बिर्सिनिनु भयो जस्तो छ, कृपया आर्गुमेंट पुन: निरिक्षण गर्नुहोस। "))
     end
 
     # X0 = params[1:nres+3]
     # X0 = params[1]
-    X0 = params.ODE_states
+    X0 = params.ODEstates
     # ODEparams = params[nres+4:nres+7]
     # ODEparams = params[2]
     ODEparams = params.ODEparams
@@ -265,6 +272,84 @@ function GR4J_model(parameters, output_times, args...)
 
     prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
     sol = solve(prob, saveat = Δt, Tsit5())
+
+    Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
+    F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
+    Qr = ODEparams[3]^(1-γ) / (Uₜ*(γ-1)) .* sol[end,:].^γ
+    Qd = max.(0, (1-Φ) .* Quh .- F)
+    Q = Qr + Qd
+
+    return Q
+    
+end
+
+function GR4J_model()
+    return "GR4J_model"
+end
+
+# --
+
+function gr4jsnowNN(params, output_times, ann)
+    
+    # X0 = params[1:nres+3]
+    # X0 = params[1]
+    X0 = params.ODE_states
+    # ODEparams = params[nres+4:nres+7]
+    # ODEparams = params[2]
+    ODEparams = params.ODEparams
+    # NNparams = params[end]
+
+    time_span = (output_times[1], output_times[end])
+
+    function odesystem!(dX, X, p, t)
+        # NNparams = ComponentArray(p[end])
+        NNparams = p.NNparams
+        # ODEparams = p[nres+4:end-1]
+        ODEparams = p.ODEparams
+        x1, x2, x3, x4 = ODEparams
+        S, R = X[1], X[end]
+        Snow = X[2]
+        Sh = X[3:end-1]
+
+        P = prec(t)
+        Ep = pet(t)
+        T = temp(t)
+
+        ann_outputs = ann([Snow, P, T], NNparams)
+        snowfrac = ann_outputs[1]
+        Psnow = P*snowfrac
+        snowmelt = ann_outputs[2]
+        dSnow = Psnow - snowmelt
+
+        P = P - Psnow
+        Pn = max(P - Ep, zero(P))
+        Ps = Pn * (1 - (S / x1)^α)
+        En = max(Ep - P, zero(P))
+        Es = En * (2 * S / x1 - (S / x1)^α)
+        Perc = x1^(1-β) / (Uₜ*(β-1)) * ν^(β-1) * S^β
+        dS = Ps - Es - Perc + snowmelt
+
+        Pr = Pn - Ps + Perc
+        Qsh = (nres-1)*x4 * Sh[1:end]   #x4 = 1/x4
+        Quh = (nres-1)*x4 * Sh[end]
+        dSh1 = Pr - Qsh[1]
+        dSh = [Qsh[i] - Qsh[i+1] for i in 1:nres-1]
+
+        Q9 = Φ*Quh
+        F = (x2 / x3^ω) * max(0,R)^ω    # avoid complex number
+        Qr = x3^(1-γ)/(Uₜ*(γ-1)) * R^γ
+        dR = Q9 + F - Qr
+
+        dX[1] = dS
+        dX[2] = dSnow
+        dX[3] = dSh1
+        dX[4:end-1] = dSh
+        dX[end] = dR
+
+    end
+
+    prob = ODEProblem(odesystem!, X0, time_span, params)
+    sol = solve(prob, saveat = Δt,Tsit5())
 
     Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
     F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
