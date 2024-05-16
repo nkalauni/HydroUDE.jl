@@ -5,7 +5,7 @@ cd("..")
 pwd()
 
 using Pkg
-Pkg.instantiate()
+#Pkg.instantiate()
 
 # Load all external packages
 using Revise
@@ -21,6 +21,9 @@ using SciMLSensitivity
 
 using Optimization, OptimizationBBO
 using OptimizationOptimisers
+using OptimizationPolyalgorithms
+using OptimizationNLopt
+using OptimizationOptimJL
 using Zygote
 
 using Interpolations
@@ -37,7 +40,7 @@ using JLD2
 
 # using Pkg
 # Pkg.add("OptimizationOptimJL")
-using OptimizationOptimJL
+
 
 using Random
 Random.seed!(300)   #Seed for reproducibility

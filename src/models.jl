@@ -271,7 +271,7 @@ function GR4J_model(parameters, output_times, args...)
     end
 
     prob = ODEProblem(odesystem!, X0, time_span, ODEparams)
-    sol = solve(prob, saveat = Δt, Tsit5())
+    sol = solve(prob, saveat = Δt, Rosenbrock23())
 
     Quh = (nres-1)/ODEparams[4] .* sol[nres+1,:]
     F = (ODEparams[2] / ODEparams[3]^ω) .* sol[end,:]
@@ -279,7 +279,7 @@ function GR4J_model(parameters, output_times, args...)
     Qd = max.(0, (1-Φ) .* Quh .- F)
     Q = Qr + Qd
 
-    return Q
+    return Q, sol
     
 end
 
