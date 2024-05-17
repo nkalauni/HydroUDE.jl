@@ -14,12 +14,6 @@ function optimize_model(Wrapper_model, initial_params; optimizer = ADAM(0.1), ma
 
     sol = Optimization.solve(opt_problem, optimizer, callback=callback_function, maxiters=maxitr)
     return sol.u
-    
-    
-    # save optimized parameters
-    # save_object("optim_vars/gr4j_state-params.jld", sol.u)
-    # save_object("optim_vars/gr4j_state-params.jld", load_object("chepe_params.jld"))
-    # parameters = load_object("optim_vars/gr4j_state-params.jld")
 
 end
 
@@ -32,11 +26,11 @@ function plot_model(model, p; portion="test", save= true, name="noname")
     if portion == "test"
         Q_nn = model(p, test_points)
         plot(test_points, test_Y, dpi = 300)
-        plot!(test_points, Q_nn, title="NSE: "*string(-NSE_loss(model, p, test_Y, test_points)))
+        plot!(test_points, Q_nn, title=portion*"_NSE: "*string(-NSE_loss(model, p, test_Y, test_points)))
     else
         Q_nn = model(p, train_points)
         plot(train_points, train_Y, dpi = 300)
-        plot!(train_points, Q_nn, title="NSE: "*string(-NSE_loss(model, p, train_Y, train_points)))
+        plot!(train_points, Q_nn, title=portion*"_NSE: "*string(-NSE_loss(model, p, train_Y, train_points)))
     end
 
     if save == true
