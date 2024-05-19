@@ -15,6 +15,7 @@ ODEstates = ones(nres+2)
 
 initial_params = vcat(ODEstates, ODEparams)
 Wrapper_model(p,t) = GR4J_model(p,t)
+Wrapper_model(initial_params, train_points)
 # optm_parameters = optimize_model(Wrapper_model, initial_params, maxitr=2)
 optm_parameters = load_object("optim_vars/gr4j_state-params.jld")
 
@@ -76,14 +77,15 @@ plot_model(Wrapper_model, gr4jsnow_params, portion="test", name="gr4jsnow_p")
 
 ann, initial_NN_params = initializeNN()
 ODEparams = [1000.0, 2.0, 200.0, 2.5] # redefine ODE params
-# ODEstates = ones(nres+3)
 ODEstates = gr4jsnow_sparams[1:nres+3]  #use ODE states from gr4jsnow model.
 
-initial_params = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNparams=initial_NN_params)
+# ODEstates = ones(nres+3)
+# initial_sparams = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNparams=initial_NN_params)
+initial_params = ComponentArray(ODEparams = ODEparams, NNparams = initial_NN_params)
 
-Wrapper_model(p, t) = gr4jsnowNN(p, t, ann)
+Wrapper_model(p, t) = gr4jsnowNN(p, t, ann, ODEstates)
 Wrapper_model(initial_params, train_points)
-optm_parameters = optimize_model(g4jsnowNN, initial_params)
+optm_parameters = optimize_model(Wrapper_model, initial_params, maxitr = 2)
 # optm_parameters = load_object("optim_vars/gr4jsnowNN_params.jld")
 
 #save and plot the model
