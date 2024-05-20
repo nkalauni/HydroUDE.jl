@@ -183,7 +183,7 @@ function GR4J_model(parameters, output_times, args...)
     Qd = max.(0, (1-Φ) .* Quh .- F)
     Q = Qr + Qd
 
-    return Q, sol
+    return Q
     
 end
 
