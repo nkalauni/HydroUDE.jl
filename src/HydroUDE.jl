@@ -81,11 +81,11 @@ ODEstates = ones(nres+4)
 initial_params = vcat(ODEstates, ODEparams)
 Wrapper_model(p,t) = gr4jSG(p,t)
 Wrapper_model(initial_params, train_points)
-gr4jsg_sparams = optimize_model(Wrapper_model, initial_params, maxitr=1000)
-# gr4jsg_sparams = load_object("optim_vars/gr4jsg_state-params.jld")
+# gr4jsg_sparams = optimize_model(Wrapper_model, initial_params, maxitr=1000)
+gr4jsg_sparams = load_object("optim_vars/gr4jsg_state-params.jld")
 
 #save and plot the model
-save_model(gr4jsg_sparams, "t")
+save_model(gr4jsg_sparams, "t")    #rename filename accordingly
 plot_model(Wrapper_model, gr4jsg_sparams, portion="train", name="gr4jsg_sp")
 plot_model(Wrapper_model, gr4jsg_sparams, portion="test", name="gr4jsg_sp")
 
@@ -100,7 +100,7 @@ Wrapper_model(ODEparams, train_points)
 gr4jsg_params = load_object("optim_vars/gr4jsg_params.jld")     #saved file error
 
 #save and plot the model
-save_model(gr4jsg_params, "t")
+save_model(gr4jsg_params, "t")    #rename filename accordingly
 plot_model(Wrapper_model, gr4jsg_params, portion="train", name="gr4jsg_p")
 plot_model(Wrapper_model, gr4jsg_params, portion="test", name="gr4jsg_p")
 
