@@ -68,6 +68,38 @@ Wrapper_model(gr4jsnow_params, train_points)
 plot_model(Wrapper_model, gr4jsnow_params, portion="train", name="gr4jsnow_p")
 plot_model(Wrapper_model, gr4jsnow_params, portion="test", name="gr4jsnow_p")
 
+# Vanilla GR4JSG
+# Initialize 9 params + initial states.
+ODEparams = [1000.0, 2.0, 200.0, 2.5, 10.0, 13.0, 15.0, 0.0, 10.0]
+ODEstates = ones(nres+4)
+
+initial_params = vcat(ODEstates, ODEparams)
+Wrapper_model(p,t) = gr4jsnow(p,t)
+Wrapper_model(initial_params, train_points)
+# gr4jsnow_sparams = optimize_model(Wrapper_model, initial_params, maxitr=2)
+gr4jsnow_sparams = load_object("optim_vars/gr4jsnow_state-params.jld")
+
+#save and plot the model
+save_model(gr4jsnow_sparams, "t")
+plot_model(Wrapper_model, gr4jsnow_sparams, portion="train", name="gr4jsnow_sp")
+plot_model(Wrapper_model, gr4jsnow_sparams, portion="test", name="gr4jsnow_sp")
+
+#=========================================================================#
+# * optimize 8 params starting with optimized initial states from GR4Jsnow.
+
+ODEstates = gr4jsnow_sparams[1:nres+3]   # Read ODEstates from previous optimization process
+
+Wrapper_model(p, t) = gr4jsnow(p, t, ODEstates)
+Wrapper_model(ODEparams, train_points)
+# gr4jsnow_params = optimize_model(Wrapper_model, ODEparams, maxitr = 2)
+# gr4jsnow_params = load_object("optim_vars/gr4jsnow_params.jld")     #saved file error
+#save and plot the model
+save_model(gr4jsnow_params, "t")
+
+Wrapper_model(gr4jsnow_params, train_points)
+plot_model(Wrapper_model, gr4jsnow_params, portion="train", name="gr4jsnow_p")
+plot_model(Wrapper_model, gr4jsnow_params, portion="test", name="gr4jsnow_p")
+
 #=========================================================================#
 #=========================================================================#
 # ## GR4JsnowNN--
