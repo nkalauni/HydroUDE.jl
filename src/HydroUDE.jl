@@ -110,18 +110,33 @@ plot_model(Wrapper_model, gr4jsnow_params, portion="test", name="gr4jsnow_p")
 
 ann, initial_NN_params = initializeNN()
 ODEparams = [1000.0, 2.0, 200.0, 2.5] # redefine ODE params
-ODEstates = gr4jsnow_sparams[1:nres+3]  #use ODE states from gr4jsnow model.
 
-# ODEstates = ones(nres+3)
-# initial_sparams = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNparams=initial_NN_params)
+ODEstates = gr4jsnow_sparams[1:nres+3]  #use ODE states from gr4jsnow model.
 initial_params = ComponentArray(ODEparams = ODEparams, NNparams = initial_NN_params)
 
 Wrapper_model(p, t) = gr4jsnowNN(p, t, ann, ODEstates)
-Wrapper_model(initial_params, train_points)
-# optm_parameters = optimize_model(Wrapper_model, initial_params, maxitr = 2)
-optm_parameters = load_object("optim_vars/gr4jsnowNN_params.jld")
+Wrapper_model(initial_sparams, train_points)
+gr4jsnowNN_params  = optimize_model(Wrapper_model, initial_params, maxitr = 1000)
+# gr4jsnowNN_params = load_object("optim_vars/gr4jsnowNN_params.jld")
 
 #save and plot the model
-save_model(optm_parameters, "t")    #rename filename accordingly
-plot_model(Wrapper_model, optm_parameters, portion="train", name="gr4jsnowNN_p")
-plot_model(Wrapper_model, optm_parameters, portion="test", name="gr4jsnowNN_p")
+save_model(gr4jsnowNN_params, "t")    #rename filename accordingly
+plot_model(Wrapper_model, gr4jsnowNN_params, portion="train", name="gr4jsnowNN_p")
+plot_model(Wrapper_model, gr4jsnowNN_params, portion="test", name="gr4jsnowNN_p")
+
+#=========================================================================#
+# * optimize NN params with initial states
+
+ODEstates = ones(nres+3)
+initial_sparams = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNparams=initial_NN_params)
+
+
+Wrapper_model(p, t) = gr4jsnowNN(p, t, ann)
+Wrapper_model(initial_sparams, train_points)
+gr4jsnowNN_sparams = optimize_model(Wrapper_model, initial_sparams, maxitr = 1000)
+# gr4jsnowNN_sparams = load_object("optim_vars/gr4jsnowNN_sparams.jld")
+
+#save and plot the model
+save_model(gr4jsnowNN_sparams, "t")    #rename filename accordingly
+plot_model(Wrapper_model, gr4jsnowNN_sparams, portion="train", name="gr4jsnowNN_p")
+plot_model(Wrapper_model, gr4jsnowNN_sparams, portion="test", name="gr4jsnowNN_p")
