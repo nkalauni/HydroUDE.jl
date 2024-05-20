@@ -129,7 +129,6 @@ function gr4jsnow(parameters, output_times, args...)
     
 end
 
-
 function GR4J_model(parameters, output_times, args...)
 
     if length(args)>0
@@ -187,13 +186,6 @@ function GR4J_model(parameters, output_times, args...)
     
 end
 
-function GR4J_model()
-    return "GR4J_model"
-end
-
-"""
-Function definiting gr4j model with NN for snow component.
-"""
 function initializeNN()
     rng = Random.default_rng()
     NNmodel = Lux.Chain(Lux.Dense(3, 16, tanh), Lux.Dense(16, 16, leakyrelu), Lux.Dense(16,2,tanh))
@@ -204,9 +196,6 @@ function initializeNN()
     return ann, p_NN_init
 
 end
-
-
-# --
 
 function gr4jsnowNN(parameters, output_times, ann, args...)
     
@@ -317,7 +306,7 @@ function gr4jSG(parameters, output_times, args...)
 
         #TODO icemelt only if snow is zero ---> how to implement this?
         icemelt = max(zero(Ice), min(DDF_ice*(T-Tbase), Ice))
-        dIce = ifelse(snow>0, 0, -icemelt)
+        dIce = ifelse(Snow>0, 0, -icemelt)
 
         P = P - Psnow
         Pn = max(P - Ep, zero(P))
