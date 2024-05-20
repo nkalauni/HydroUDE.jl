@@ -317,7 +317,7 @@ function gr4jSG(parameters, output_times, args...)
 
         #TODO icemelt only if snow is zero ---> how to implement this?
         icemelt = max(zero(Ice), min(DDF_ice*(T-Tbase), Ice))
-        dIce = -icemelt
+        dIce = ifelse(snow>0, 0, -icemelt)
 
         P = P - Psnow
         Pn = max(P - Ep, zero(P))
