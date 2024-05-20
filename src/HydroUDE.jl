@@ -13,7 +13,7 @@ ODEstates = ones(nres+2)
 initial_params = vcat(ODEstates, ODEparams)
 Wrapper_model(p,t) = GR4J_model(p,t)
 Wrapper_model(initial_params, train_points)
-# optm_parameters = optimize_model(Wrapper_model, initial_params, maxitr=2)
+optm_parameters = optimize_model(Wrapper_model, initial_params, maxitr=2)
 optm_parameters = load_object("optim_vars/gr4j_state-params.jld")
 
 #save and plot the model
@@ -60,21 +60,11 @@ ODEstates = gr4jsnow_sparams[1:nres+3]   # Read ODEstates from previous optimiza
 Wrapper_model(p, t) = gr4jsnow(p, t, ODEstates)
 Wrapper_model(ODEparams, train_points)
 # gr4jsnow_params = optimize_model(Wrapper_model, ODEparams, maxitr = 2)
-gr4jsnow_params = load_object("optim_vars/gr4jsnow_params.jld")
+# gr4jsnow_params = load_object("optim_vars/gr4jsnow_params.jld")     #saved file error
 #save and plot the model
 save_model(gr4jsnow_params, "t")
 
 Wrapper_model(gr4jsnow_params, train_points)
-
-portion = "train"
-p = gr4jsnow_params
-model = Wrapper_model
-Q_nn = model(p, test_points)
-plot(test_points, test_Y, dpi = 300)
-plot!(test_points, Q_nn, title=portion*"_NSE: "*string(-NSE_loss(model, p, test_Y, test_points)))
-plot!(test_points, Q_nn)
-savefig("plots/t.png")
-
 plot_model(Wrapper_model, gr4jsnow_params, portion="train", name="gr4jsnow_p")
 plot_model(Wrapper_model, gr4jsnow_params, portion="test", name="gr4jsnow_p")
 

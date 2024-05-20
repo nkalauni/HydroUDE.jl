@@ -1,4 +1,4 @@
-losses = Float64[]
+
 # generic loss function:
 function NSE_loss(model, params, target_data, target_time)
 
@@ -16,37 +16,28 @@ function NSE_loss(model, params, target_data, target_time)
 
 end
 
-function callback(model, p, l)
+function callback(model, p, l, losses)
 
+    println("Updating plot")
     #txt save
-    open("chepe_log_file.txt", "w") do file
+    open("runtime_env/runtime_params.txt", "w") do file
         write(file, "NSE: "*string(-l)*", "*string(p.u))
     end
-
-    push!(losses, -l)
-    #json save
-    # open("chepe_.json", "w") do f
-    #     JSON.print(f, p.u, 4)  # The '4' here specifies the indentation level for pretty printing
-    # end
-
+    
     #jld save
-    save_object("chepe_params.jld", p.u)
+    save_object("runtime_env/runtime_params.jld", p.u)
+
+    #iteration counter
+    push!(losses, -l)
 
     #image save
-    # println("Updating plot")
-    println("Updating plot...Loss after $(length(losses)) iterations:")
-    times = train_ + 1:Δt:data_points[end]
-    
-    # Q_nn = gr4jsnowNN(p.u, times, ann)
-    Q_nn = model(p.u, times)
+    Q_nn = model(p.u, test_points)
+    plot(test_points, test_Y, dpi = 300)
+    plot!(test_points, Q_nn, title="NSE[Itr: $(length(losses))]: "*string(-l))
+    savefig("runtime_env/runtime_plot.png")
 
-    
-    plot(times, df[(train_ +1):end,:streamflow], dpi = 300)
-    plot!(times,Q_nn, title="NSE: "*string(-l))
-    
-    savefig("src/runtime_plot.png")
-
-    println("NSE: "*string(-l))
+    #Pring log in terminal
+    println("NSE[Itr: $(length(losses))]: "*string(-l))
     return false
 
 end

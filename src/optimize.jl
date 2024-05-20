@@ -1,10 +1,10 @@
 function optimize_model(Wrapper_model, initial_params; optimizer = ADAM(0.1), maxitr = 20, save = false)
-
+    losses = Float64[]
     # define loss function
     loss_function(p) = NSE_loss(Wrapper_model, p, train_Y, train_points)
 
     # define callack function
-    callback_function(p,l) = callback(Wrapper_model, p, l)
+    callback_function(p,l) = callback(Wrapper_model, p, l, losses)
 
     # define optimization  function
     opt_func = Optimization.OptimizationFunction((p, known_params) -> loss_function(p), Optimization.AutoZygote())
