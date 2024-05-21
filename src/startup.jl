@@ -24,6 +24,7 @@ using Zygote
 using Interpolations
 using Plots
 using JLD2
+using BenchmarkTools
 
 using Random
 Random.seed!(300)   #Seed for reproducibility

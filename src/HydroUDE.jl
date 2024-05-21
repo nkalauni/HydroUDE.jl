@@ -1,3 +1,5 @@
+module HydroUDE
+
 include("startup.jl")
 include("load_data.jl")
 include("utils.jl")
@@ -127,6 +129,8 @@ plot_model(Wrapper_model, gr4jsnowNN_params, portion="test", name="gr4jsnowNN_p"
 
 #=========================================================================#
 # * optimize NN params with initial states
+ann, initial_NN_params = initializeNN()
+ODEparams = [1000.0, 2.0, 200.0, 2.5] # redefine ODE params
 
 ODEstates = ones(nres+3)
 initial_sparams = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNparams=initial_NN_params)
@@ -137,7 +141,9 @@ Wrapper_model(p, t) = gr4jsnowNN(p, t, ann)
 # gr4jsnowNN_sparams = optimize_model(Wrapper_model, initial_sparams, maxitr = 1000)
 gr4jsnowNN_sparams = load_object("optim_vars/gr4jsnowNN_sparams.jld")
 
-@profview Wrapper_model(gr4jsnowNN_sparams, train_points)
+# @profview Wrapper_model(gr4jsnowNN_sparams, train_points)
+# @profview optimize_model(Wrapper_model, initial_sparams, maxitr = 2)
+# @btime optimize_model(Wrapper_model, initial_sparams, maxitr = 2)
 
 #save and plot the model
 save_model(gr4jsnowNN_sparams, "t")    #rename filename accordingly
@@ -145,3 +151,4 @@ plot_model(Wrapper_model, gr4jsnowNN_sparams, portion="train", name="gr4jsnowNN_
 plot_model(Wrapper_model, gr4jsnowNN_sparams, portion="test", name="gr4jsnowNN_p")
 
 #=========================================================================#
+end
