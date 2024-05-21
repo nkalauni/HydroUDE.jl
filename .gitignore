@@ -26,3 +26,6 @@ Manifest.toml
 
 #DATA FILES
 # *.jld
+
+optim_vars/t.jld
+# runtime_env/*

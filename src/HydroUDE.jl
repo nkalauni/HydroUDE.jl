@@ -132,9 +132,11 @@ initial_sparams = ComponentArray(ODEstates=ODEstates, ODEparams=ODEparams, NNpar
 
 
 Wrapper_model(p, t) = gr4jsnowNN(p, t, ann)
-Wrapper_model(initial_sparams, train_points)
-gr4jsnowNN_sparams = optimize_model(Wrapper_model, initial_sparams, maxitr = 1000)
-# gr4jsnowNN_sparams = load_object("optim_vars/gr4jsnowNN_sparams.jld")
+# Wrapper_model(initial_sparams, train_points)
+# gr4jsnowNN_sparams = optimize_model(Wrapper_model, initial_sparams, maxitr = 1000)
+gr4jsnowNN_sparams = load_object("optim_vars/gr4jsnowNN_sparams.jld")
+
+@profview Wrapper_model(gr4jsnowNN_sparams, train_points)
 
 #save and plot the model
 save_model(gr4jsnowNN_sparams, "t")    #rename filename accordingly
